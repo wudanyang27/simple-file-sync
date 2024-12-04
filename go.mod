@@ -1,4 +1,4 @@
-module ithub.com/wudanyang6/simple-file-sync
+module github.com/wudanyang6/simple-file-sync
 
 go 1.22
 

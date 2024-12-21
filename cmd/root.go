@@ -15,7 +15,7 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "simple-file-sync",
 	Short: "simple file sync",
-	Long:  `a simple file sync between server and client. it just handle add and modify file event.`,
+	Long:  `a simple file sync from client to server. it just handle add and modify file event.`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

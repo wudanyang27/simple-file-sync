@@ -1,7 +1,6 @@
-package main
+package server
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -13,21 +12,50 @@ import (
 	"syscall"
 )
 
-var (
-	port     = flag.Int("port", 8120, "Port to listen on")
-	token    = flag.String("token", "", "Token for authentication")
-	limitDir = flag.String("limit-dir", "", "Limit directory, start with home dir")
-)
+type Server struct {
+	Port     int
+	Token    string
+	LimitDir string
+}
 
-func uploadHandler(w http.ResponseWriter, r *http.Request) {
+func NewServer(port int, token, limitDir string) *Server {
+	return &Server{
+		Port:     port,
+		Token:    token,
+		LimitDir: limitDir,
+	}
+}
+
+func (s *Server) Start() {
+	// 捕获 ctrl-c 信号，并关闭服务器
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT)
+
+	go func() {
+		<-sigs
+		log.Println("Caught SIGINT, stopping server...")
+		os.Exit(0)
+	}()
+
+	http.HandleFunc("/receiver", s.uploadHandler)
+	log.Printf("Starting server at port %d...\n", s.Port)
+	log.Println("Limit directory: ", s.LimitDir)
+	log.Println("Token: ", s.Token)
+
+	if err := http.ListenAndServe(fmt.Sprintf(":%d", s.Port), nil); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (s *Server) uploadHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
 
-	if len(*token) != 0 {
+	if len(s.Token) != 0 {
 		uToken := r.PostFormValue("token")
-		if uToken != *token {
+		if uToken != s.Token {
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
 		}
@@ -47,16 +75,8 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Println("Uploading to: ", fullPath)
 
-	// 获取当前用户的家目录，如果上传文件在家目录之外则报错
-	home, err := os.UserHomeDir()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		log.Println(err)
-		return
-	}
-
-	if !filepath.IsAbs(fullPath) || !strings.HasPrefix(fullPath, home+*limitDir) {
-		http.Error(w, "Invalid target path, valid path: "+home+*limitDir, http.StatusBadRequest)
+	if !filepath.IsAbs(fullPath) || !strings.HasPrefix(fullPath, s.LimitDir) {
+		http.Error(w, "Invalid target path, valid path: "+s.LimitDir, http.StatusBadRequest)
 		return
 	}
 
@@ -88,25 +108,4 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Fprintf(w, "File uploaded successfully: %s\n", fullPath)
-}
-
-func main() {
-	flag.Parse()
-
-	// 捕获 ctrl-c 信号，并关闭服务器
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT)
-
-	go func() {
-		<-sigs
-		log.Println("Caught SIGINT, stopping server...")
-		os.Exit(0)
-	}()
-
-	http.HandleFunc("/receiver", uploadHandler)
-	log.Printf("Starting server at port %d...\n", *port)
-
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", *port), nil); err != nil {
-		log.Fatal(err)
-	}
 }

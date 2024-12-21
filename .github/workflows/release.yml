@@ -6,7 +6,7 @@ on:
       - 'v*'  # Trigger this action only when a tag starting with "v" is pushed
 
 jobs:
-  release:
+  release-linux:
     runs-on: ubuntu-latest
 
     steps:
@@ -23,15 +23,40 @@ jobs:
       # Build the project (optional, depending on whether you want to include the binary in the release)
       - name: Build Project
         run: |
-          go build -o simple-file-sync .
+          go build -o simple-file-sync-linux .
 
       # Create a new GitHub release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: ./simple-file-sync  # Path to your built binary (you can adjust this based on your build output)
+          files: ./simple-file-sync-linux  # Path to your built binary (you can adjust this based on your build output)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Upload the release assets (e.g., binary files or archives)
-      # This step is handled by the action-gh-release above, but if needed, you can customize
+  release-macos:
+    runs-on: macos-latest
+
+    steps:
+      # Checkout the repository code
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # Set up Go (since this is a Go project)
+      - name: Set up Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: '1.22'  # Replace with your Go version if different
+
+      # Build the project (optional, depending on whether you want to include the binary in the release)
+      - name: Build Project
+        run: |
+          go build -o simple-file-sync-mac .
+
+      # Create a new GitHub release
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ./simple-file-sync-mac  # Path to your built binary (you can adjust this based on your build output)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

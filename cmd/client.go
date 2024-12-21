@@ -20,13 +20,9 @@ var (
 // clientCmd represents the client command
 var clientCmd = &cobra.Command{
 	Use:   "client",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "client for simple file sync",
+	Long: `A client for simple file sync. For example:
+ 	simple-file-sync client --local-dir=/Users/wudanyang/self/simple-file-sync --mode=all --remote-dir=/Users/wudanyang/self/testforsimple --server-addr=http://127.0.0.1:8120/receiver --server-token=something`,
 	Run: func(cmd *cobra.Command, args []string) {
 		client.NewClient(
 			ClientUploadMode,

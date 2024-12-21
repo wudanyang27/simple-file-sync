@@ -20,14 +20,9 @@ const serverToken = "kfcvme50"
 
 // serverCmd represents the server command
 var serverCmd = &cobra.Command{
-	Use:   "server --port [args]",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Use:   "server --port",
+	Short: "server for simple file sync",
+	Long:  `A server for simple file sync. For example: simple-file-sync server `,
 	Run: func(cmd *cobra.Command, args []string) {
 		server.NewServer(ServerPort, ServerToken, ServerLimitDir).Start()
 	},
@@ -44,5 +39,6 @@ func init() {
 		// 未找到家目录，使用/tmp
 		homeDir = "/tmp"
 	}
-	serverCmd.Flags().StringVar(&ServerLimitDir, "limit-dir", homeDir, "limit directory, start with home dir")
+	serverCmd.Flags().StringVar(&ServerLimitDir, "limit-dir", "/your/homeDir", "You can’t upload to anything other than the limit-dir folder, default is your home directory")
+	ServerLimitDir = homeDir
 }

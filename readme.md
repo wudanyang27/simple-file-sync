@@ -4,7 +4,7 @@ simple file sync
 
 ### Synopsis
 
-a simple file sync between server and client. it just handle add and modify file event.
+a simple file sync from server to client. it just handle add and modify file event.
 
 ### Options
 

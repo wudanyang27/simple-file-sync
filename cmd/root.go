@@ -4,11 +4,9 @@ Copyright © 2024 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
-	"log"
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/cobra/doc"
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -24,11 +22,6 @@ func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
 		os.Exit(1)
-	}
-	errD := doc.GenMarkdownTree(rootCmd, "./docs")
-	if errD != nil {
-		log.Println(errD)
-		return
 	}
 }
 

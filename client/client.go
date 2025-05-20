@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -22,8 +23,8 @@ const (
 )
 
 type PathMapping struct {
-	SourcePath string
-	TargetPath string
+	SourcePattern *regexp.Regexp
+	TargetPath    string
 }
 
 type Client struct {
@@ -33,7 +34,7 @@ type Client struct {
 	ServerTargetDir string
 	ServerToken     string
 	PathMappings    []PathMapping
-	IgnorePatterns  []string
+	IgnorePatterns  []*regexp.Regexp
 	uploadChan      chan string
 	watcher         *fsnotify.Watcher
 }
@@ -46,50 +47,60 @@ func NewClient(mode, baseDir, serverURL, target, token string) *Client {
 		ServerTargetDir: target,
 		ServerToken:     token,
 		PathMappings:    []PathMapping{},
-		IgnorePatterns:  []string{},
+		IgnorePatterns:  []*regexp.Regexp{},
 		uploadChan:      make(chan string, NumWorkers),
 	}
 }
 
-// AddPathMapping 添加一个路径映射
+// AddPathMapping 添加一个路径映射，使用正则表达式
 func (c *Client) AddPathMapping(source, target string) {
+	// 编译正则表达式
+	pattern, err := regexp.Compile(source)
+	if err != nil {
+		log.Printf("Invalid path mapping pattern %s: %v", source, err)
+		return
+	}
+
 	c.PathMappings = append(c.PathMappings, PathMapping{
-		SourcePath: source,
-		TargetPath: target,
+		SourcePattern: pattern,
+		TargetPath:    target,
 	})
+	log.Printf("Added path mapping: %s -> %s", source, target)
 }
 
-// AddIgnorePattern 添加一个忽略模式
+// AddIgnorePattern 添加一个忽略模式，使用正则表达式
 func (c *Client) AddIgnorePattern(pattern string) {
-	c.IgnorePatterns = append(c.IgnorePatterns, pattern)
+	// 编译正则表达式
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		log.Printf("Invalid ignore pattern %s: %v", pattern, err)
+		return
+	}
+
+	c.IgnorePatterns = append(c.IgnorePatterns, re)
+	log.Printf("Added ignore pattern: %s", pattern)
 }
 
-// ShouldIgnore 检查文件是否应该被忽略
+// ShouldIgnore 检查文件是否应该被忽略，使用正则表达式匹配
 func (c *Client) ShouldIgnore(path string) bool {
-	// 忽略 .DS_Store 文件
+	// 忽略 .DS_Store 文件（保留基本忽略逻辑）
 	if strings.HasSuffix(path, ".DS_Store") {
 		return true
 	}
 
-	// 忽略备份文件
+	// 忽略备份文件（保留基本忽略逻辑）
 	if strings.HasSuffix(path, "~") {
 		return true
 	}
 
-	// 检查文件是否匹配忽略模式
+	// 检查文件是否匹配忽略正则表达式
 	for _, pattern := range c.IgnorePatterns {
-		matched, err := filepath.Match(pattern, filepath.Base(path))
-		if err == nil && matched {
-			return true
-		}
-
-		// 检查路径是否匹配模式
-		if strings.Contains(path, pattern) {
+		if pattern.MatchString(path) {
 			return true
 		}
 	}
 
-	// 检查是否是隐藏目录
+	// 检查是否是隐藏目录（保留基本忽略逻辑）
 	fi, err := os.Stat(path)
 	if err == nil && fi.IsDir() && strings.HasPrefix(fi.Name(), ".") {
 		return true
@@ -98,7 +109,7 @@ func (c *Client) ShouldIgnore(path string) bool {
 	return false
 }
 
-// MapPath 根据路径映射规则映射路径
+// MapPath 根据路径映射规则映射路径，使用正则表达式
 func (c *Client) MapPath(path string) string {
 	// 如果没有路径映射规则，直接返回原始路径
 	if len(c.PathMappings) == 0 {
@@ -107,9 +118,9 @@ func (c *Client) MapPath(path string) string {
 
 	// 检查是否有匹配的路径映射
 	for _, mapping := range c.PathMappings {
-		if strings.HasPrefix(path, mapping.SourcePath) {
-			// 替换前缀
-			return strings.Replace(path, mapping.SourcePath, mapping.TargetPath, 1)
+		if mapping.SourcePattern.MatchString(path) {
+			// 使用正则表达式替换
+			return mapping.SourcePattern.ReplaceAllString(path, mapping.TargetPath)
 		}
 	}
 

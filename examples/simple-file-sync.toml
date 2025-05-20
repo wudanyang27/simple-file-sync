@@ -1,0 +1,45 @@
+# simple-file-sync 示例配置文件
+
+# 客户端模式：all - 同步所有文件，git - 仅同步git差异文件
+mode = "all"
+
+# 本地目录，将被监控和同步
+local_dir = "/Users/username/projects/my-project"
+
+# 远程目录，文件将被上传到这里
+remote_dir = "/remote/path/my-project"
+
+# 服务器地址
+server_addr = "http://example.com:8120/receiver"
+
+# 服务器验证令牌
+server_token = "your-secret-token"
+
+# 忽略模式 (正则表达式)
+ignore = [
+  # 忽略临时文件
+  "\\.tmp$",
+  # 忽略log文件
+  "\\.log$",
+  # 忽略node_modules目录
+  "node_modules",
+  # 忽略构建目录
+  "build",
+  # 忽略隐藏文件和目录
+  "/\\.[^/]+",
+  # 忽略bin目录下的可执行文件
+  "bin/.*"
+]
+
+# 路径映射 (正则表达式:目标路径格式)
+path_mappings = [
+  # 将src目录下的文件映射到远程的build目录
+  "/src(/.*)\\.js$:/build$1.min.js",
+  
+  # 将本地的images目录映射到远程的static/images目录
+  "/images(/.*):static/images$1",
+  
+  # 将不同类型的文件映射到不同的目标目录
+  "/local/path/(.*\\.go):/remote/go/$1",
+  "/local/path/(.*\\.js):/remote/js/$1"
+] 

@@ -21,12 +21,19 @@ const (
 	NumWorkers = 30
 )
 
+type PathMapping struct {
+	SourcePath string
+	TargetPath string
+}
+
 type Client struct {
 	Mode            string
 	LocalDir        string
 	ServerURL       string
 	ServerTargetDir string
 	ServerToken     string
+	PathMappings    []PathMapping
+	IgnorePatterns  []string
 	uploadChan      chan string
 	watcher         *fsnotify.Watcher
 }
@@ -38,8 +45,76 @@ func NewClient(mode, baseDir, serverURL, target, token string) *Client {
 		ServerURL:       serverURL,
 		ServerTargetDir: target,
 		ServerToken:     token,
+		PathMappings:    []PathMapping{},
+		IgnorePatterns:  []string{},
 		uploadChan:      make(chan string, NumWorkers),
 	}
+}
+
+// AddPathMapping 添加一个路径映射
+func (c *Client) AddPathMapping(source, target string) {
+	c.PathMappings = append(c.PathMappings, PathMapping{
+		SourcePath: source,
+		TargetPath: target,
+	})
+}
+
+// AddIgnorePattern 添加一个忽略模式
+func (c *Client) AddIgnorePattern(pattern string) {
+	c.IgnorePatterns = append(c.IgnorePatterns, pattern)
+}
+
+// ShouldIgnore 检查文件是否应该被忽略
+func (c *Client) ShouldIgnore(path string) bool {
+	// 忽略 .DS_Store 文件
+	if strings.HasSuffix(path, ".DS_Store") {
+		return true
+	}
+
+	// 忽略备份文件
+	if strings.HasSuffix(path, "~") {
+		return true
+	}
+
+	// 检查文件是否匹配忽略模式
+	for _, pattern := range c.IgnorePatterns {
+		matched, err := filepath.Match(pattern, filepath.Base(path))
+		if err == nil && matched {
+			return true
+		}
+
+		// 检查路径是否匹配模式
+		if strings.Contains(path, pattern) {
+			return true
+		}
+	}
+
+	// 检查是否是隐藏目录
+	fi, err := os.Stat(path)
+	if err == nil && fi.IsDir() && strings.HasPrefix(fi.Name(), ".") {
+		return true
+	}
+
+	return false
+}
+
+// MapPath 根据路径映射规则映射路径
+func (c *Client) MapPath(path string) string {
+	// 如果没有路径映射规则，直接返回原始路径
+	if len(c.PathMappings) == 0 {
+		return path
+	}
+
+	// 检查是否有匹配的路径映射
+	for _, mapping := range c.PathMappings {
+		if strings.HasPrefix(path, mapping.SourcePath) {
+			// 替换前缀
+			return strings.Replace(path, mapping.SourcePath, mapping.TargetPath, 1)
+		}
+	}
+
+	// 没有匹配的映射规则，返回原始路径
+	return path
 }
 
 func (c *Client) Start() {
@@ -78,13 +153,13 @@ func (c *Client) watcherThread() func() {
 					return
 				}
 				log.Println(event)
-				if strings.HasSuffix(event.Name, ".DS_Store") {
+
+				// 使用ShouldIgnore方法判断是否应该忽略文件
+				if c.ShouldIgnore(event.Name) {
+					log.Println("Ignoring file:", event.Name)
 					continue
 				}
-				if strings.HasSuffix(event.Name, "~") {
-					log.Println("Skipping backup file:", event.Name)
-					continue
-				}
+
 				fi, err := os.Stat(event.Name)
 				if err == nil && fi.IsDir() && strings.HasPrefix(fi.Name(), ".") {
 					log.Println("Skipping hidden directory:", event.Name)
@@ -95,6 +170,12 @@ func (c *Client) watcherThread() func() {
 					log.Println("Detected new file or directory:", event.Name)
 
 					if err == nil && fi.IsDir() {
+						// 检查目录是否应该被忽略
+						if c.ShouldIgnore(event.Name) {
+							log.Println("Ignoring directory:", event.Name)
+							continue
+						}
+
 						errDir := c.watcher.Add(event.Name)
 						log.Println("Watching new dir" + event.Name)
 						if errDir != nil {
@@ -132,15 +213,22 @@ func (c *Client) initNewDir() {
 		if err != nil {
 			return err
 		}
+
+		// 使用ShouldIgnore方法判断是否应该忽略文件或目录
+		if c.ShouldIgnore(path) {
+			if info.IsDir() {
+				log.Println("Skipping ignored directory:", path)
+				return filepath.SkipDir
+			}
+			log.Println("Skipping ignored file:", path)
+			return nil
+		}
+
 		if !info.IsDir() {
 			if c.Mode == "all" {
 				filesToUpload = append(filesToUpload, path)
 			}
 		} else {
-			if strings.HasPrefix(info.Name(), ".") {
-				log.Println("Skipping hidden directory:", path)
-				return filepath.SkipDir
-			}
 			err = c.watcher.Add(path)
 			if err != nil {
 				log.Println("Error adding directory to watcher:", path, err)
@@ -159,6 +247,18 @@ func (c *Client) initNewDir() {
 		if err != nil {
 			log.Fatal(err)
 		}
+
+		// 过滤掉应该被忽略的文件
+		var filteredFiles []string
+		for _, file := range filesToUpload {
+			if !c.ShouldIgnore(file) {
+				filteredFiles = append(filteredFiles, file)
+			} else {
+				log.Println("Skipping ignored git diff file:", file)
+			}
+		}
+		filesToUpload = filteredFiles
+
 		log.Println("Uploading git diff files:", len(filesToUpload))
 	} else {
 		log.Fatalf("Unknown mode: %s", c.Mode)
@@ -195,7 +295,10 @@ func (c *Client) uploadFile(filename string, serverURL string, target string, ba
 		return err
 	}
 
-	targetPath := filepath.Join(target, relativePath)
+	// 应用路径映射
+	mappedPath := c.MapPath(filepath.Join(target, relativePath))
+	targetPath := mappedPath
+
 	log.Println("Uploading file: ", targetPath)
 
 	writer.WriteField("target", targetPath)
@@ -208,7 +311,7 @@ func (c *Client) uploadFile(filename string, serverURL string, target string, ba
 	}
 	defer resp.Body.Close()
 	// 读取 body
-	body, err := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 
 	log.Printf("upload res: %+v", string(body))
 

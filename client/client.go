@@ -343,11 +343,18 @@ func (c *Client) worker(id int) {
 }
 
 func getGitDiffFiles(baseDir string) ([]string, error) {
-	cmd := exec.Command("git", "diff", "origin", "--name-only")
+	cmd := exec.Command("git", "diff", "origin/master", "--name-only")
 	cmd.Dir = baseDir
 	output, err := cmd.Output()
 	if err != nil {
-		return nil, err
+		log.Printf("Failed to get git diff files: %v try origin/main", err)
+		cmd := exec.Command("git", "diff", "origin/main", "--name-only")
+		cmd.Dir = baseDir
+		output, err = cmd.Output()
+		if err != nil {
+			log.Printf("Failed to get git diff files: %v", err)
+			return nil, err
+		}
 	}
 
 	files := strings.Split(string(output), "\n")

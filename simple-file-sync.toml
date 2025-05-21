@@ -1,0 +1,28 @@
+# 客户端模式：all - 同步所有文件，git - 仅同步git差异文件
+mode = "all"
+
+# 本地目录，将被监控和同步
+local_dir = "/Users/wudanyang/self/simple-file-sync"
+
+# 远程目录，文件将被上传到这里
+remote_dir = "/home/users/wudanyang/wudanyang/simple-file-sync"
+
+# 服务器地址
+server_addr = "http://10.25.78.81:8120/receiver"
+
+# 服务器验证令牌
+server_token = "123456"
+
+# 忽略模式 (正则表达式)
+ignore = [
+  "\\.tmp$",
+  "\\.log$",
+  "node_modules",
+  "build"
+]
+
+# 路径映射 (正则表达式:目标路径格式)
+path_mappings = [
+  "/src(/.*)\\.js$:/build$1.min.js",
+  "/images(/.*):static/images$1"
+]

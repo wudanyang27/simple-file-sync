@@ -11,7 +11,7 @@ remote_dir = "/home/users/wudanyang/wudanyang/simple-file-sync"
 server_addr = "http://10.25.78.81:8120/receiver"
 
 # 服务器验证令牌
-server_token = "123456"
+server_token = "xxxxxx"
 
 # 忽略模式 (正则表达式)
 ignore = [

@@ -1,45 +1,45 @@
 # simple-file-sync 示例配置文件
-
 # 客户端模式：all - 同步所有文件，git - 仅同步git差异文件
 mode = "all"
 
 # 本地目录，将被监控和同步
-local_dir = "/Users/username/projects/my-project"
+local_dir = "/Users/wudanyang/self/simple-file-sync"
 
-# 远程目录，文件将被上传到这里
-remote_dir = "/remote/path/my-project"
+# 当前激活的远程目标名称
+active_target = "icoding-dev"
 
-# 服务器地址
-server_addr = "http://example.com:8120/receiver"
-
-# 服务器验证令牌
-server_token = "your-secret-token"
-
-# 忽略模式 (正则表达式)
+# 忽略模式 (全值匹配，正则表达式)
 ignore = [
-  # 忽略临时文件
-  "\\.tmp$",
-  # 忽略log文件
-  "\\.log$",
-  # 忽略node_modules目录
-  "node_modules",
-  # 忽略构建目录
-  "build",
-  # 忽略隐藏文件和目录
-  "/\\.[^/]+",
-  # 忽略bin目录下的可执行文件
-  "bin/.*"
+    ".*/\\.tmp$",
+    ".*/\\.log$",
+    ".*/node_modules$",
+    ".*/build$",
+    ".*/.git/.*",       # 匹配所有.git目录内的任何文件/目录
+    ".*/\\.git",        # 匹配.git目录（不带末尾斜杠）
+    ".*/\\.DS_Store$",
+    ".*/__pycache__",
+    ".*/.gitignore",
+    ".*/.idea",
+    ".*/.vscode",
+    ".*/.github",
 ]
 
 # 路径映射 (正则表达式:目标路径格式)
 path_mappings = [
-  # 将src目录下的文件映射到远程的build目录
-  "/src(/.*)\\.js$:/build$1.min.js",
-  
-  # 将本地的images目录映射到远程的static/images目录
-  "/images(/.*):static/images$1",
-  
-  # 将不同类型的文件映射到不同的目标目录
-  "/local/path/(.*\\.go):/remote/go/$1",
-  "/local/path/(.*\\.js):/remote/js/$1"
-] 
+    "/src(/.*)\\.js$:/build$1.min.js",
+    "/images(/.*):static/images$1",
+]
+
+
+# 远程目标配置
+[[remote_targets]]
+name = "example-prod"
+server_addr = "http://10.25.78.81:8120/receiver"
+remote_dir = "/home/users/wudanyang/wudanyang/example-simple-file-sync-prod"
+token = "123456"
+
+[[remote_targets]]
+name = "example-dev"
+server_addr = "http://10.25.78.81:8122/receiver"
+remote_dir = "/home/users/wudanyang/wudanyang/example-simple-file-sync-dev"
+token = "123456"

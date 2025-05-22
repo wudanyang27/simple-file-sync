@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/spf13/cobra"
@@ -25,17 +26,28 @@ var (
 	ClientIgnorePatterns []string
 	ClientPathMappings   []string
 	ClientConfigFile     string
+	ClientTargetName     string
 )
+
+// RemoteTargetConfig 表示远程目标配置
+type RemoteTargetConfig struct {
+	Name      string `toml:"name"`
+	ServerAddr string `toml:"server_addr"`
+	RemoteDir  string `toml:"remote_dir"`
+	Token      string `toml:"token"`
+}
 
 // ClientConfig 表示客户端配置文件结构
 type ClientConfig struct {
-	Mode         string   `toml:"mode"`
-	LocalDir     string   `toml:"local_dir"`
-	RemoteDir    string   `toml:"remote_dir"`
-	ServerAddr   string   `toml:"server_addr"`
-	ServerToken  string   `toml:"server_token"`
-	Ignore       []string `toml:"ignore"`
-	PathMappings []string `toml:"path_mappings"`
+	Mode         string              `toml:"mode"`
+	LocalDir     string              `toml:"local_dir"`
+	RemoteDir    string              `toml:"remote_dir"`       // 向后兼容
+	ServerAddr   string              `toml:"server_addr"`      // 向后兼容
+	ServerToken  string              `toml:"server_token"`     // 向后兼容
+	RemoteTargets []RemoteTargetConfig `toml:"remote_targets"` // 新增多目标配置
+	ActiveTarget string              `toml:"active_target"`    // 当前激活的目标名称
+	Ignore       []string            `toml:"ignore"`
+	PathMappings []string            `toml:"path_mappings"`
 }
 
 // loadConfig 从TOML文件加载配置
@@ -72,15 +84,42 @@ func overrideConfigWithFlags(config *ClientConfig) {
 	if ClientLocalDir != "" {
 		config.LocalDir = ClientLocalDir
 	}
-	if ClientRemoteDir != "" {
-		config.RemoteDir = ClientRemoteDir
+	if ClientTargetName != "" {
+		config.ActiveTarget = ClientTargetName
 	}
-	if ClientServerAddr != "" {
-		config.ServerAddr = ClientServerAddr
+	
+	// 处理传统参数，创建或更新默认远程目标
+	if ClientRemoteDir != "" || ClientServerAddr != "" || ClientServerToken != "" {
+		// 直接创建新的远程目标
+		remoteDir := ClientRemoteDir
+		if remoteDir == "" {
+			remoteDir = config.RemoteDir // 使用旧配置
+		}
+		
+		serverAddr := ClientServerAddr
+		if serverAddr == "" {
+			serverAddr = config.ServerAddr // 使用旧配置
+		}
+		
+		token := ClientServerToken
+		if token == "" {
+			token = config.ServerToken // 使用旧配置
+		}
+		
+		// 生成一个唯一的目标名称，使用时间戳
+		targetName := fmt.Sprintf("cmdline_%d", time.Now().Unix())
+		
+		config.RemoteTargets = append(config.RemoteTargets, RemoteTargetConfig{
+			Name:      targetName,
+			RemoteDir:  remoteDir,
+			ServerAddr: serverAddr,
+			Token:      token,
+		})
+		
+		// 将新创建的目标设为活动目标
+		config.ActiveTarget = targetName
 	}
-	if ClientServerToken != "" {
-		config.ServerToken = ClientServerToken
-	}
+	
 	if len(ClientIgnorePatterns) > 0 {
 		config.Ignore = append(config.Ignore, ClientIgnorePatterns...)
 	}
@@ -100,11 +139,50 @@ func validateConfig(config *ClientConfig) error {
 	if config.LocalDir == "" {
 		return fmt.Errorf("必须指定本地目录 (local_dir)")
 	}
-	if config.ServerAddr == "" {
-		return fmt.Errorf("必须指定服务器地址 (server_addr)")
+	
+	// 兼容旧配置，将其转换为新的远程目标结构
+	if len(config.RemoteTargets) == 0 && config.ServerAddr != "" && config.RemoteDir != "" {
+		config.RemoteTargets = append(config.RemoteTargets, RemoteTargetConfig{
+			Name:      "default",
+			ServerAddr: config.ServerAddr,
+			RemoteDir:  config.RemoteDir,
+			Token:      config.ServerToken,
+		})
+		config.ActiveTarget = "default"
 	}
-	if config.RemoteDir == "" {
-		return fmt.Errorf("必须指定远程目录 (remote_dir)")
+	
+	// 验证是否至少有一个远程目标
+	if len(config.RemoteTargets) == 0 {
+		return fmt.Errorf("必须配置至少一个远程目标 (remote_targets)")
+	}
+	
+	// 验证每个远程目标的配置
+	for _, target := range config.RemoteTargets {
+		if target.ServerAddr == "" {
+			return fmt.Errorf("远程目标 '%s' 必须指定服务器地址 (server_addr)", target.Name)
+		}
+		if target.RemoteDir == "" {
+			return fmt.Errorf("远程目标 '%s' 必须指定远程目录 (remote_dir)", target.Name)
+		}
+	}
+	
+	// 如果没有设置活动目标，使用第一个目标
+	if config.ActiveTarget == "" {
+		config.ActiveTarget = config.RemoteTargets[0].Name
+		log.Printf("未指定活动目标，使用 '%s'", config.ActiveTarget)
+	}
+	
+	// 确认活动目标存在
+	targetExists := false
+	for _, target := range config.RemoteTargets {
+		if target.Name == config.ActiveTarget {
+			targetExists = true
+			break
+		}
+	}
+	
+	if !targetExists {
+		return fmt.Errorf("指定的活动目标 '%s' 不存在", config.ActiveTarget)
 	}
 
 	return nil
@@ -126,6 +204,9 @@ var clientCmd = &cobra.Command{
  	For mapping, the source is a regular expression with capture groups, and target can use $1, $2, etc. to reference captured groups.
  	For example, "/local/path(/.*)" will capture everything after "/local/path" in $1, which can then be referenced in the target path.
  	
+ 	You can specify which remote target to use:
+ 	--target=production
+ 	
  	You can also specify a configuration file in TOML format:
  	-c config.toml or --config=config.toml
  	
@@ -133,9 +214,21 @@ var clientCmd = &cobra.Command{
  	
  	mode = "all"
  	local_dir = "/Users/wudanyang/self/simple-file-sync"
- 	remote_dir = "/Users/wudanyang/self/testforsimple"
+ 	active_target = "dev"
+ 	
+ 	# 远程目标配置
+ 	[[remote_targets]]
+ 	name = "dev"
  	server_addr = "http://127.0.0.1:8120/receiver"
- 	server_token = "something"
+ 	remote_dir = "/Users/wudanyang/self/testforsimple"
+ 	token = "something"
+ 	
+ 	[[remote_targets]]
+ 	name = "production"
+ 	server_addr = "http://example.com:8120/receiver"
+ 	remote_dir = "/var/www/production"
+ 	token = "production-token"
+ 	
  	ignore = ["\\.tmp$", "node_modules", "build"]
  	path_mappings = ["/local/path(/.*):remote/path$1"]
  	`,
@@ -158,10 +251,22 @@ var clientCmd = &cobra.Command{
 		client := client.NewClient(
 			config.Mode,
 			config.LocalDir,
-			config.ServerAddr,
-			config.RemoteDir,
-			config.ServerToken,
 		)
+		
+		// 添加所有远程目标
+		for _, target := range config.RemoteTargets {
+			client.AddRemoteTarget(
+				target.Name,
+				target.ServerAddr,
+				target.RemoteDir,
+				target.Token,
+			)
+		}
+		
+		// 设置活动目标
+		if err := client.SetActiveTarget(config.ActiveTarget); err != nil {
+			log.Fatalf("设置活动目标失败: %v", err)
+		}
 
 		// 添加忽略模式
 		for _, pattern := range config.Ignore {
@@ -176,11 +281,24 @@ var clientCmd = &cobra.Command{
 			}
 		}
 
+		// 查找当前活动目标
+		var activeTarget *RemoteTargetConfig
+		for _, target := range config.RemoteTargets {
+			if target.Name == config.ActiveTarget {
+				activeTarget = &target
+				break
+			}
+		}
+		
+		if activeTarget == nil {
+			log.Fatalf("找不到活动目标: %s", config.ActiveTarget)
+		}
+
 		// 默认添加基础目录映射
-		if config.LocalDir != "" && config.RemoteDir != "" {
+		if config.LocalDir != "" && activeTarget.RemoteDir != "" {
 			// 将基础目录作为正则表达式和替换模式，需要转义特殊字符
 			source := "^" + regexp.QuoteMeta(config.LocalDir) + "(/.*)?$"
-			target := config.RemoteDir + "$1"
+			target := activeTarget.RemoteDir + "$1"
 			client.AddPathMapping(source, target)
 		}
 
@@ -195,6 +313,7 @@ func init() {
 	clientCmd.Flags().StringVar(&ClientRemoteDir, "remote-dir", "", "remote directory")
 	clientCmd.Flags().StringVar(&ClientServerAddr, "server-addr", "", "server address")
 	clientCmd.Flags().StringVar(&ClientServerToken, "server-token", "", "server token")
+	clientCmd.Flags().StringVar(&ClientTargetName, "target", "", "name of the remote target to use")
 
 	// 添加ignore和mapping的flags
 	clientCmd.Flags().StringSliceVar(&ClientIgnorePatterns, "ignore", []string{}, "regex patterns to ignore, comma separated, e.g. \\.tmp$,node_modules")

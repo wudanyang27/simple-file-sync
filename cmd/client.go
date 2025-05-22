@@ -41,10 +41,7 @@ type RemoteTargetConfig struct {
 type ClientConfig struct {
 	Mode         string              `toml:"mode"`
 	LocalDir     string              `toml:"local_dir"`
-	RemoteDir    string              `toml:"remote_dir"`       // 向后兼容
-	ServerAddr   string              `toml:"server_addr"`      // 向后兼容
-	ServerToken  string              `toml:"server_token"`     // 向后兼容
-	RemoteTargets []RemoteTargetConfig `toml:"remote_targets"` // 新增多目标配置
+	RemoteTargets []RemoteTargetConfig `toml:"remote_targets"`
 	ActiveTarget string              `toml:"active_target"`    // 当前激活的目标名称
 	Ignore       []string            `toml:"ignore"`
 	PathMappings []string            `toml:"path_mappings"`
@@ -88,22 +85,12 @@ func overrideConfigWithFlags(config *ClientConfig) {
 		config.ActiveTarget = ClientTargetName
 	}
 	
-	// 处理传统参数，创建或更新默认远程目标
+	// 处理命令行参数，创建新的远程目标
 	if ClientRemoteDir != "" || ClientServerAddr != "" || ClientServerToken != "" {
-		// 直接创建新的远程目标
-		remoteDir := ClientRemoteDir
-		if remoteDir == "" {
-			remoteDir = config.RemoteDir // 使用旧配置
-		}
-		
-		serverAddr := ClientServerAddr
-		if serverAddr == "" {
-			serverAddr = config.ServerAddr // 使用旧配置
-		}
-		
-		token := ClientServerToken
-		if token == "" {
-			token = config.ServerToken // 使用旧配置
+		// 必须同时提供所有三个参数
+		if ClientRemoteDir == "" || ClientServerAddr == "" || ClientServerToken == "" {
+			log.Printf("警告: 使用命令行创建远程目标需要同时提供 remote-dir, server-addr 和 server-token 参数")
+			return
 		}
 		
 		// 生成一个唯一的目标名称，使用时间戳
@@ -111,9 +98,9 @@ func overrideConfigWithFlags(config *ClientConfig) {
 		
 		config.RemoteTargets = append(config.RemoteTargets, RemoteTargetConfig{
 			Name:      targetName,
-			RemoteDir:  remoteDir,
-			ServerAddr: serverAddr,
-			Token:      token,
+			RemoteDir:  ClientRemoteDir,
+			ServerAddr: ClientServerAddr,
+			Token:      ClientServerToken,
 		})
 		
 		// 将新创建的目标设为活动目标
@@ -138,17 +125,6 @@ func validateConfig(config *ClientConfig) error {
 
 	if config.LocalDir == "" {
 		return fmt.Errorf("必须指定本地目录 (local_dir)")
-	}
-	
-	// 兼容旧配置，将其转换为新的远程目标结构
-	if len(config.RemoteTargets) == 0 && config.ServerAddr != "" && config.RemoteDir != "" {
-		config.RemoteTargets = append(config.RemoteTargets, RemoteTargetConfig{
-			Name:      "default",
-			ServerAddr: config.ServerAddr,
-			RemoteDir:  config.RemoteDir,
-			Token:      config.ServerToken,
-		})
-		config.ActiveTarget = "default"
 	}
 	
 	// 验证是否至少有一个远程目标

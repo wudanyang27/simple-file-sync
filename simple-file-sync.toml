@@ -1,0 +1,30 @@
+# Simple File Sync Configuration
+
+# Client mode: all - sync all files, git - only sync git diff files
+mode = "all"
+
+# Local directory - will be set to config file directory if not specified
+# local_dir = "/path/to/local/directory"
+
+# Remote directory where files will be uploaded
+remote_dir = "/home/users/remote/directory"
+
+# Server address
+server_addr = "http://127.0.0.1:8120/receiver"
+
+# Server authentication token
+server_token = "your-token-here"
+
+# Ignore patterns (regular expressions)
+ignore = [
+  "\\.tmp$",
+  "\\.log$", 
+  "node_modules",
+  "build"
+]
+
+# Path mappings (regex:target_path_format)
+path_mappings = [
+  "/src(/.*)\\.js$:/build$1.min.js",
+  "/images(/.*):static/images$1"
+]

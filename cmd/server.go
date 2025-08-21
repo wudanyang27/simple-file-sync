@@ -16,8 +16,6 @@ var (
 	ServerLimitDir string
 )
 
-const serverToken = "kfcvme50"
-
 // serverCmd represents the server command
 var serverCmd = &cobra.Command{
 	Use:   "server --port",
@@ -32,7 +30,7 @@ func init() {
 	rootCmd.AddCommand(serverCmd)
 
 	serverCmd.Flags().IntVar(&ServerPort, "port", 8120, "port to listen on")
-	serverCmd.Flags().StringVar(&ServerToken, "token", serverToken, "token for authentication")
+	serverCmd.Flags().StringVar(&ServerToken, "token", defaultServerToken, "token for authentication")
 
 	homeDir, err := homedir.Dir()
 	if err != nil {

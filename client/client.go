@@ -385,7 +385,11 @@ func (c *Client) uploadFile(filename string, baseDir string) error {
 	defer resp.Body.Close()
 	
 	// 读取 body
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Failed to read response body: %v", err)
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
 
 	log.Printf("upload res: %+v", string(body))
 
